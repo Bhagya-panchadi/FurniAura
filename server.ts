@@ -656,6 +656,25 @@ app.post('/api/orders', (req: Request, res: Response) => {
   };
 
   orders.unshift(newOrder);
+
+  // Optional notification to n8n webhook workflow
+  const n8nWebhook = process.env.N8N_WEBHOOK_URL || 'https://bhagya4478.app.n8n.cloud/webhook/4f6f1c09-5b20-47d9-96a5-c95d834cdcdb/chat';
+  if (n8nWebhook) {
+    fetch(n8nWebhook, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'order_placed',
+        orderNumber: newOrder.orderNumber,
+        customerName: newOrder.customerName,
+        customerEmail: newOrder.customerEmail,
+        total: newOrder.total,
+        items: newOrder.items,
+        shippingAddress: newOrder.shippingAddress,
+      }),
+    }).catch(() => {});
+  }
+
   res.status(201).json({ success: true, order: newOrder });
 });
 
@@ -718,7 +737,35 @@ app.post('/api/ai/chat', async (req: Request, res: Response) => {
   const { messages, userContext } = req.body;
   const lastUserMessage = messages?.[messages.length - 1]?.text || '';
 
-  // Check if API key is present
+  // 1. If an external n8n webhook is specified or active, try forwarding query
+  const n8nChatWebhook = process.env.N8N_CHAT_WEBHOOK_URL || 'https://bhagya4478.app.n8n.cloud/webhook/4f6f1c09-5b20-47d9-96a5-c95d834cdcdb/chat';
+  if (n8nChatWebhook && process.env.USE_N8N_AGENT === 'true') {
+    try {
+      const n8nRes = await fetch(n8nChatWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatInput: lastUserMessage,
+          message: lastUserMessage,
+          history: messages,
+          userContext,
+        }),
+      });
+      if (n8nRes.ok) {
+        const data: any = await n8nRes.json().catch(() => null);
+        if (data && (data.output || data.text || data.response || data.message)) {
+          return res.json({
+            text: data.output || data.text || data.response || data.message,
+            suggestedProducts: data.suggestedProducts || undefined,
+          });
+        }
+      }
+    } catch (e) {
+      console.log('n8n chat bridge fallback to Gemini/catalog intelligence');
+    }
+  }
+
+  // 2. Check if Gemini API key is present
   if (!process.env.GEMINI_API_KEY) {
     // Intelligent local fallback matching prompt constraints
     const fallbackAnswer = generateIntelligentFallback(lastUserMessage);
