@@ -1,0 +1,6 @@
+{
+  "name": "FurniAura - AI-Powered Premium Furniture & Interior Studio",
+  "description": "Discover luxury furniture, interactive 2D room layouts, and personalized design guidance powered by Aura AI shopping agent.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
